@@ -146,13 +146,18 @@ def find_and_activate_tab(title_hint, timeout, poll):
 
 
 def find_and_click(win, button_name, timeout, poll):
-    """Find a button by name within a specific window and activate it."""
+    """Find a button by name within a specific window and activate it.
+
+    Uses descendants() rather than child_window(): the latter expects a
+    single unique match and raises on ambiguity, which silently broke this
+    when a page has more than one button with the same visible text (e.g.
+    MySource's "Go to Schedule" appears twice)."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            btn = win.child_window(title=button_name, control_type="Button")
-            if btn.exists(timeout=0.5):
-                activate_element(btn)
+            matches = win.descendants(title=button_name, control_type="Button")
+            if matches:
+                activate_element(matches[0])
                 return True
         except Exception:
             pass
