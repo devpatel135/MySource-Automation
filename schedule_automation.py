@@ -98,11 +98,16 @@ def force_foreground(win):
 
 
 def activate_element(element):
-    """Trigger a UIA element via its native pattern (Select/Invoke) rather
+    """Trigger a UIA element via its native pattern (Invoke/Select) rather
     than a real screen-coordinate click. A screen click can land on the
     wrong window if something else happens to be covering that pixel at
-    that instant; invoking the pattern directly sidesteps that entirely."""
-    for method in ("select", "invoke"):
+    that instant; invoking the pattern directly sidesteps that entirely.
+
+    Invoke (UIA's "DoDefault" action) is tried first: it's what actually
+    triggers Chromium's real activation behavior for both buttons and tabs.
+    Select can report success on a tab without truly switching to it, so
+    it's only a fallback, not the primary method."""
+    for method in ("invoke", "select"):
         try:
             getattr(element, method)()
             return
