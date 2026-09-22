@@ -1,0 +1,13 @@
+{
+  "name": "mysource-schedule-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Weekly automation that opens Edge, signs into MySource via SSO, and confirms the schedule.",
+  "main": "schedule-automation.js",
+  "scripts": {
+    "start": "node schedule-automation.js"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}
