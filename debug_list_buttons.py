@@ -27,7 +27,7 @@ for win in windows:
             ctrl_type = ctrl.element_info.control_type
         except Exception:
             ctrl_type = "?"
-        if ctrl_type not in ("Button", "MenuItem"):
+        if ctrl_type not in ("Button", "MenuItem", "TabItem"):
             continue
         try:
             name = ctrl.window_text()
