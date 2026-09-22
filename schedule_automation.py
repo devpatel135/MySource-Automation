@@ -70,9 +70,23 @@ def resolve_edge_path():
     return "msedge"  # fall back to PATH
 
 
+def activate_element(element):
+    """Trigger a UIA element via its native pattern (Select/Invoke) rather
+    than a real screen-coordinate click. A screen click can land on the
+    wrong window if something else happens to be covering that pixel at
+    that instant; invoking the pattern directly sidesteps that entirely."""
+    for method in ("select", "invoke"):
+        try:
+            getattr(element, method)()
+            return
+        except Exception:
+            continue
+    element.click_input()
+
+
 def find_and_activate_tab(title_hint, timeout, poll):
-    """Find any open Edge tab whose label starts with title_hint, click it
-    to make it the active tab, and return its window."""
+    """Find any open Edge tab whose label starts with title_hint, activate
+    it, and return its window."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -88,9 +102,11 @@ def find_and_activate_tab(title_hint, timeout, poll):
                     except Exception:
                         continue
                     if name.startswith(title_hint):
-                        tab.click_input()
                         win.set_focus()
-                        return win
+                        activate_element(tab)
+                        time.sleep(0.5)
+                        if win.window_text().startswith(title_hint):
+                            return win
         except Exception:
             pass
         time.sleep(poll)
@@ -98,13 +114,13 @@ def find_and_activate_tab(title_hint, timeout, poll):
 
 
 def find_and_click(win, button_name, timeout, poll):
-    """Find a button by name within a specific window and click it."""
+    """Find a button by name within a specific window and activate it."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             btn = win.child_window(title=button_name, control_type="Button")
             if btn.exists(timeout=0.5):
-                btn.click_input()
+                activate_element(btn)
                 return True
         except Exception:
             pass
