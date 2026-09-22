@@ -25,11 +25,17 @@ it — and isn't affected by that policy. `schedule_automation.py` uses the
 `pywinauto` library to find Edge's on-screen buttons by their visible text
 and click them, the same way an accessibility tool would.
 
+One quirk this has to work around: Chromium only builds the accessibility
+tree for whichever tab is currently the *focused/active* tab in its
+window — a background tab is invisible to UI Automation even though it's
+fully loaded. The tab's label itself is always visible (it's browser
+chrome, not page content), so the script finds whichever open tab's label
+starts with "MySource" and clicks that tab to activate it before it looks
+for "Go to Schedule"/"Confirm Schedule".
+
 Trade-off: this is less precise than driving the DOM directly. It matches
-buttons by their visible text across any open Edge window, so it's a little
-more fragile if MySource changes that text, and it depends on Chromium
-exposing its accessibility tree (which it does automatically once a UI
-Automation client — like this script — starts querying it).
+buttons by their visible text, so it's a little more fragile if MySource
+changes that text or its tab title.
 
 ## Why it navigates to `mysource1.deloitte.com` instead of a raw login link
 
@@ -106,6 +112,7 @@ action, or in your shell before an interactive test run):
 | --- | --- | --- |
 | `MYSOURCE_URL` | `https://mysource1.deloitte.com/` | Page to navigate to first. |
 | `EDGE_PATH` | auto-detected under `Program Files` / `Program Files (x86)` | Path to `msedge.exe`. |
+| `MYSOURCE_TAB_HINT` | `MySource` | Prefix used to find and activate the right open tab by its label. |
 | `NAV_TIMEOUT_SECONDS` | `120` | Max wait for each button to appear (covers slow sign-in/MFA). |
 | `POLL_INTERVAL_SECONDS` | `2` | How often to re-check for the button while waiting. |
 
@@ -123,9 +130,13 @@ screen at 10 AM.
 - **"Go to Schedule" or "Confirm Schedule" button never appears even after
   signing in**: MySource may have changed its markup, or there's nothing to
   confirm that week (e.g. schedule already confirmed). Check manually.
-- **Wrong button gets clicked, or nothing happens on click**: another open
-  Edge window also matches the button text (unlikely given how specific
-  "Go to Schedule"/"Confirm Schedule" are, but possible). Close unrelated
-  Edge windows before the scheduled run.
+- **Wrong button gets clicked, or nothing happens on click**: multiple open
+  tabs have labels starting with "MySource" (e.g. stale tabs from earlier
+  test runs) and the wrong one got activated. Close extra MySource tabs
+  before the scheduled run, or narrow `MYSOURCE_TAB_HINT`.
+- **Times out finding a tab starting with "MySource"**: run
+  `python debug_list_buttons.py` while the page is open to see the actual
+  tab labels and button names UI Automation can see, and compare against
+  what the script expects.
 - **`python` isn't recognized**: install Python via your organization's
   software catalog, then open a new terminal.

@@ -8,8 +8,13 @@ Playwright/Selenium/Puppeteer all rely on that protocol and are blocked by
 such a policy, but UI Automation is a separate OS-level mechanism it doesn't
 cover.
 
-Opens Edge to MySource, waits for and clicks "Go to Schedule", waits for the
-schedule page, then clicks "Confirm Schedule".
+Chromium only builds its accessibility tree for a tab while that tab is
+the focused/active one in its window -- background tabs stay invisible to
+UI Automation entirely, even though the tab label itself (browser chrome,
+not page content) is always visible. So this script: opens MySource, finds
+whichever open tab's label starts with "MySource" and clicks it to make it
+the active tab, then waits for and clicks "Go to Schedule" followed by
+"Confirm Schedule" within that same window.
 """
 
 import logging
@@ -50,6 +55,7 @@ DEFAULT_EDGE_PATHS = [
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 ]
 
+TAB_TITLE_HINT = os.environ.get("MYSOURCE_TAB_HINT", "MySource")
 NAV_TIMEOUT_SECONDS = int(os.environ.get("NAV_TIMEOUT_SECONDS", "120"))
 POLL_INTERVAL_SECONDS = float(os.environ.get("POLL_INTERVAL_SECONDS", "2"))
 
@@ -64,19 +70,42 @@ def resolve_edge_path():
     return "msedge"  # fall back to PATH
 
 
-def find_and_click(button_name, timeout=NAV_TIMEOUT_SECONDS, poll=POLL_INTERVAL_SECONDS):
+def find_and_activate_tab(title_hint, timeout, poll):
+    """Find any open Edge tab whose label starts with title_hint, click it
+    to make it the active tab, and return its window."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             windows = Desktop(backend="uia").windows(class_name_re="Chrome_WidgetWin_.*")
             for win in windows:
                 try:
-                    btn = win.child_window(title=button_name, control_type="Button")
-                    if btn.exists(timeout=0.5):
-                        btn.click_input()
-                        return True
+                    tabs = win.descendants(control_type="TabItem")
                 except Exception:
                     continue
+                for tab in tabs:
+                    try:
+                        name = tab.window_text()
+                    except Exception:
+                        continue
+                    if name.startswith(title_hint):
+                        tab.click_input()
+                        win.set_focus()
+                        return win
+        except Exception:
+            pass
+        time.sleep(poll)
+    return None
+
+
+def find_and_click(win, button_name, timeout, poll):
+    """Find a button by name within a specific window and click it."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            btn = win.child_window(title=button_name, control_type="Button")
+            if btn.exists(timeout=0.5):
+                btn.click_input()
+                return True
         except Exception:
             pass
         time.sleep(poll)
@@ -86,10 +115,20 @@ def find_and_click(button_name, timeout=NAV_TIMEOUT_SECONDS, poll=POLL_INTERVAL_
 def main():
     edge_path = resolve_edge_path()
     log.info(f"Opening Edge ({edge_path}) at {URL} ...")
-    subprocess.Popen([edge_path, "--new-window", URL])
+    subprocess.Popen([edge_path, URL])
+
+    log.info(f'Waiting for a tab starting with "{TAB_TITLE_HINT}" and activating it...')
+    win = find_and_activate_tab(TAB_TITLE_HINT, NAV_TIMEOUT_SECONDS, POLL_INTERVAL_SECONDS)
+    if win is None:
+        log.error(
+            f'Timed out finding a tab starting with "{TAB_TITLE_HINT}". Run '
+            "debug_list_buttons.py to see what tabs/buttons are actually visible."
+        )
+        sys.exit(1)
+    log.info(f"Activated tab: {win.window_text()!r}")
 
     log.info('Waiting for "Go to Schedule" button...')
-    if not find_and_click("Go to Schedule"):
+    if not find_and_click(win, "Go to Schedule", NAV_TIMEOUT_SECONDS, POLL_INTERVAL_SECONDS):
         log.error(
             'Timed out waiting for "Go to Schedule". The page likely stopped at a '
             "sign-in/MFA prompt instead of reaching MySource. Run this script "
@@ -100,7 +139,7 @@ def main():
     log.info('Clicked "Go to Schedule".')
 
     log.info('Waiting for "Confirm Schedule" button...')
-    if not find_and_click("Confirm Schedule"):
+    if not find_and_click(win, "Confirm Schedule", NAV_TIMEOUT_SECONDS, POLL_INTERVAL_SECONDS):
         log.error('Timed out waiting for "Confirm Schedule".')
         sys.exit(1)
     log.info('Clicked "Confirm Schedule". Done.')
