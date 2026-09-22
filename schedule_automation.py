@@ -33,6 +33,16 @@ except ImportError:
     )
     sys.exit(1)
 
+try:
+    import win32con
+    import win32gui
+except ImportError:
+    print(
+        "pywin32 is not installed. Run: python -m pip install -r requirements.txt",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(SCRIPT_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -70,6 +80,23 @@ def resolve_edge_path():
     return "msedge"  # fall back to PATH
 
 
+def force_foreground(win):
+    """Bring a background window to genuine OS focus. Windows deliberately
+    blocks unrelated processes from stealing foreground focus outright, but
+    minimizing then restoring a window is a well-known way around that
+    restriction. Chromium ties full accessibility-tree population to real
+    window focus, not just which tab Chrome considers internally selected,
+    so this matters even after the tab itself has been switched."""
+    hwnd = win.handle
+    win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+    win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+    try:
+        win32gui.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+    time.sleep(0.5)
+
+
 def activate_element(element):
     """Trigger a UIA element via its native pattern (Select/Invoke) rather
     than a real screen-coordinate click. A screen click can land on the
@@ -102,7 +129,7 @@ def find_and_activate_tab(title_hint, timeout, poll):
                     except Exception:
                         continue
                     if name.startswith(title_hint):
-                        win.set_focus()
+                        force_foreground(win)
                         activate_element(tab)
                         time.sleep(0.5)
                         if win.window_text().startswith(title_hint):
